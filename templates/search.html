@@ -1,0 +1,96 @@
+<html>
+
+<head>
+	<title>My Music!</title>
+	<style>
+		tr.odd {
+			background-color: #CEDFF2;
+		}
+
+		tr.even {
+			background-color: #ffffff;
+		}
+	</style>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+	<script type="text/javascript">
+		function search() {
+			const endpoint = "http://localhost:8001/search?term=";
+			const search_term = encodeURIComponent(document.getElementById("search").value);
+			jQuery.get(endpoint + search_term, buildTable);
+		}
+
+		function album(a) {
+			const endpoint = "http://localhost:8001/search?album=";
+			jQuery.get(endpoint + encodeURIComponent(a), buildTable);
+		}
+
+		function artist(a) {
+			const endpoint = "http://localhost:8001/search?artist=";
+			jQuery.get(endpoint + encodeURIComponent(a), buildTable);
+		}
+
+		function listen(id) {
+			var player = document.getElementById('player');
+			player.src = "http://localhost:8001/listen?id=" + id;
+			player.play();
+		}
+
+		function buildTable(data) {
+			var html = "<table id='songTable'>";
+			html += "<thead>";
+			html += "<th>Song</th>";
+			html += "<th>Artist</th>";
+			html += "<th>Album</th>";
+			html += "<th>Year</th>";
+			html += "<th>Duration</th>";
+			html += "</thead>";
+
+			for (var i = 0; i < data.length; i++) {
+				var song = data[i];
+				const c = i % 2 ? "even" : "odd";
+				html += `<tr class='${c}'>`;
+				html += `<td><a href="javascript:listen('${song.id}')">${song.title}</a></td>`;
+				html += `<td><a href="javascript:artist('${song.artist}')">${song.artist}</a></td>`;
+				html += `<td><a href="javascript:album('${song.album}')">${song.album}</a></td>`;
+
+				if (song.year != "0") {
+					html += `<td>${song.year}</td>`;
+				} else {
+					html += `<td>N/A</td>`;
+				}
+				html += `<td>${song.duration}</td>`;
+				html += "</tr>";
+			}
+
+			html += "</table>";
+
+			var songs = document.getElementById("songs");
+			songs.innerHTML = html;
+		}
+
+		window.onload = function () {
+			const endpoint = "http://localhost:8001/search";
+			//const search_term = document.getElementById("search").value;
+
+			//var result = jQuery.get(endpoint + search_term, function (data) {
+			//	buildTable(data);
+			//});
+			jQuery.get(endpoint, buildTable);
+			//jQuery.get(endpoint + search_term, buildTable);
+		}
+
+	</script>
+</head>
+
+<body>
+	<input type="text" id="search" placeholder="Search..." onkeyup="search()">
+
+	<audio controls id='player' src="">
+		Your browser does not support the
+		<code>audio</code> element.
+	</audio>
+
+	<div id='songs' />
+</body>
+
+</html>

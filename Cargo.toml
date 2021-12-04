@@ -1,0 +1,18 @@
+[package]
+name = "bwaabwaa"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[dependencies]
+warp = "0.3.2"
+tokio = { version = "1.14.0", features = ["full"] }
+askama = "0.10.5"
+mp3-metadata = "0.3.3"
+serde = "1.0.130"
+serde_json = "1.0"
