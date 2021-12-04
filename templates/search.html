@@ -14,25 +14,42 @@
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 	<script type="text/javascript">
 		function search() {
-			const endpoint = "http://localhost:8001/search?term=";
+			const endpoint = "/search?term=";
 			const search_term = encodeURIComponent(document.getElementById("search").value);
 			jQuery.get(endpoint + search_term, buildTable);
 		}
 
 		function album(a) {
-			const endpoint = "http://localhost:8001/search?album=";
+			const endpoint = "/search?album=";
 			jQuery.get(endpoint + encodeURIComponent(a), buildTable);
 		}
 
 		function artist(a) {
-			const endpoint = "http://localhost:8001/search?artist=";
+			const endpoint = "/search?artist=";
 			jQuery.get(endpoint + encodeURIComponent(a), buildTable);
 		}
 
 		function listen(id) {
 			var player = document.getElementById('player');
-			player.src = "http://localhost:8001/listen?id=" + id;
+			player.src = "/listen?id=" + id;
 			player.play();
+
+			details(id);
+		}
+
+		function details(id) {
+			const endpoint = "/details?id=";
+			jQuery.get(endpoint + id, function (data) {
+				text = `Now Playing: <i>${data.title}</i>`;
+				if (data.album != '') {
+					text += ` on <a href="javascript:album('${data.album}')">${data.album}</a>`;
+				}
+				if (data.artist != '') {
+					text += ` by <a href="javascript:artist('${data.artist}')">${data.artist}</a>`;
+				}
+				var nowPlaying = document.getElementById('nowPlaying');
+				nowPlaying.innerHTML = text;
+			});
 		}
 
 		function buildTable(data) {
@@ -69,8 +86,7 @@
 		}
 
 		window.onload = function () {
-			const endpoint = "http://localhost:8001/search";
-			//const search_term = document.getElementById("search").value;
+			const endpoint = "/search";
 
 			//var result = jQuery.get(endpoint + search_term, function (data) {
 			//	buildTable(data);
@@ -90,7 +106,9 @@
 		<code>audio</code> element.
 	</audio>
 
-	<div id='songs' />
+	<div id='nowPlaying'></div>
+
+	<div id='songs'></div>
 </body>
 
 </html>

@@ -66,6 +66,8 @@ impl MusicDB {
     }
 
     pub fn query(&self, terms: &SearchTerms) -> Vec<SongResult> {
+        let lim = terms.limit.unwrap_or(SearchTerms::DEFAULT_LIMIT) as usize;
+
         let mut results: Box<dyn Iterator<Item = _>> = Box::new(self.records.values());
 
         if let Some(artist) = &terms.artist {
@@ -84,10 +86,11 @@ impl MusicDB {
                         || song.artist.to_lowercase().contains(&term[..])
                         || song.album.to_lowercase().contains(&term[..])
                 })
+                .take(lim)
                 .map(|s| s.into())
                 .collect()
         } else {
-            results.map(|s| s.into()).collect()
+            results.take(lim).map(|s| s.into()).collect()
         }
     }
 }
@@ -109,12 +112,26 @@ pub struct SearchTerms {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub term: Option<String>,
+    pub limit: Option<u16>,
+}
+
+impl SearchTerms {
+    const DEFAULT_LIMIT: u16 = 100;
 }
 
 pub(crate) fn load_db(directories: Vec<PathBuf>) -> Option<MusicDB> {
     if directories.is_empty() {
         // Nothing to scan - just load the library file if possible.
-        MusicDB::from_file(LIBRARY_FILE).ok()
+        let start = std::time::Instant::now();
+        let db = MusicDB::from_file(LIBRARY_FILE).ok()?;
+        println!(
+            "Loaded {} files from {} in {:.2?}",
+            db.records.len(),
+            LIBRARY_FILE,
+            start.elapsed()
+        );
+
+        Some(db)
     } else {
         println!("Scanning for MP3s...");
         let start = std::time::Instant::now();

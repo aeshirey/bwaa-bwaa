@@ -1,3 +1,4 @@
+use crate::song::SongResult;
 use askama::Template;
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -38,13 +39,23 @@ async fn main() {
         .and(database.clone())
         .and_then(handle_search);
 
+    let details = warp::path!("details")
+        .and(warp::query().map(|map: HashMap<String, String>| map.get("id").unwrap().to_string()))
+        .and(database.clone())
+        .and_then(handle_details);
+
     let whats_new = warp::path!("whatsnew").and_then(handle_whats_new);
 
     let cors = warp::cors().allow_any_origin();
 
-    let routes = library.or(listen).or(search).or(whats_new).with(cors);
+    let routes = library
+        .or(listen)
+        .or(search)
+        .or(whats_new)
+        .or(details)
+        .with(cors);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 8001)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
 }
 
 async fn handle_library(
@@ -104,6 +115,24 @@ async fn handle_search(
     let results = db.query(&terms);
 
     Ok(warp::reply::json(&results))
+}
+
+async fn handle_details(
+    id: String,
+    database: Arc<Mutex<MusicDB>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let db = database.lock().await;
+    let id = id.parse::<u64>().unwrap();
+    match db.records.get(&id) {
+        Some(s) => {
+            let song: SongResult = s.into();
+            Ok(warp::reply::json(&song))
+            //Response::builder()
+            //    .header("content-type", "text/json")
+            //    .body(song)
+        }
+        None => Ok(warp::reply::json(&"?")), //todo!(),
+    }
 }
 
 async fn handle_whats_new() -> Result<impl warp::Reply, warp::Rejection> {
