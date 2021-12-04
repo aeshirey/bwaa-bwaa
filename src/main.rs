@@ -1,5 +1,5 @@
 use askama::Template;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use warp::{http::Response, Filter};
 
@@ -15,7 +15,12 @@ const WHATS_NEW_PUSSYCAT: &[u8; 28797] = include_bytes!("../What's new pussycat.
 
 #[tokio::main]
 async fn main() {
-    let database = load_db().expect("Must pass --dir=<dir> or --library=<file>");
+    let to_scan = std::env::args()
+        .filter(|arg| arg.starts_with("--scan="))
+        .map(|arg| PathBuf::from(&arg[7..]))
+        .filter(|path| path.exists())
+        .collect();
+    let database = music_db::load_db(to_scan).expect("Failed to load database");
     let database = Arc::new(Mutex::new(database));
     let database = warp::any().map(move || Arc::clone(&database));
 
@@ -40,41 +45,6 @@ async fn main() {
     let routes = library.or(listen).or(search).or(whats_new).with(cors);
 
     warp::serve(routes).run(([127, 0, 0, 1], 8001)).await;
-}
-
-fn load_db() -> Option<MusicDB> {
-    let directories = std::env::args()
-        .filter(|arg| arg.starts_with("--dir="))
-        .map(|arg| arg.split_at("--dir=".len()).1.to_string())
-        .collect::<Vec<String>>();
-
-    let library = std::env::args()
-        .find(|arg| arg.starts_with("--library="))
-        .map(|arg| arg[10..].to_string());
-
-    let start = std::time::Instant::now();
-
-    let db = if directories.is_empty() {
-        let library = library.expect("Must pass --dir=<dir> or --library=<file>");
-        MusicDB::from_file(&library).ok()?
-    } else {
-        println!("Scanning for MP3s...");
-        let db = directories
-            .iter()
-            .filter_map(|dir| MusicDB::scan(dir).ok())
-            .fold(MusicDB::default(), |a, b| a + b);
-
-        if let Some(library) = library {
-            db.save_to(&library).ok();
-        }
-
-        db
-    };
-
-    let elapsed = start.elapsed();
-    println!("Loaded {} files in {:.2?}", db.records.len(), elapsed,);
-
-    Some(db)
 }
 
 async fn handle_library(

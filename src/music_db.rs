@@ -1,13 +1,13 @@
+use crate::song::{Song, SongResult};
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
-use serde::Deserialize;
-
-use crate::song::{Song, SongResult};
+const LIBRARY_FILE: &str = "library.json";
 
 #[derive(Default)]
 pub(crate) struct MusicDB {
@@ -30,15 +30,17 @@ impl MusicDB {
         Ok(Self { records })
     }
 
-    pub fn scan(directory: &str) -> Result<Self, std::io::Error> {
-        fn scan_dir(dir: &str, records: &mut HashMap<u64, Song>) -> Result<(), std::io::Error> {
+    pub fn scan(directory: &Path) -> Result<Self, std::io::Error> {
+        fn scan_dir(dir: &Path, records: &mut HashMap<u64, Song>) -> Result<(), std::io::Error> {
             let dir_entries = std::fs::read_dir(dir)?;
             for entry in dir_entries {
                 let path = entry?.path();
                 if path.is_dir() {
-                    scan_dir(path.to_str().unwrap(), records)?;
-                } else if let Ok(s) = Song::new(path.to_str().unwrap()) {
-                    records.insert(s.id, s);
+                    scan_dir(&path, records)?;
+                } else if let Some(s) = path.to_str() {
+                    if let Ok(s) = Song::new(s) {
+                        records.insert(s.id, s);
+                    }
                 }
             }
             Ok(())
@@ -107,4 +109,28 @@ pub struct SearchTerms {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub term: Option<String>,
+}
+
+pub(crate) fn load_db(directories: Vec<PathBuf>) -> Option<MusicDB> {
+    if directories.is_empty() {
+        // Nothing to scan - just load the library file if possible.
+        MusicDB::from_file(LIBRARY_FILE).ok()
+    } else {
+        println!("Scanning for MP3s...");
+        let start = std::time::Instant::now();
+        let scanned = directories
+            .iter()
+            .filter_map(|dir| MusicDB::scan(dir).ok())
+            .fold(MusicDB::default(), |a, b| a + b);
+
+        let elapsed = start.elapsed();
+        println!("Scanned {} files in {:.2?}", scanned.records.len(), elapsed);
+
+        let existing = MusicDB::from_file(LIBRARY_FILE).unwrap_or_else(|_| MusicDB::default());
+
+        let db = scanned + existing;
+        db.save_to(LIBRARY_FILE).ok();
+
+        Some(db)
+    }
 }
