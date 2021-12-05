@@ -85,6 +85,11 @@ impl Song {
 
         formatted
     }
+
+    pub fn file_stem(&self) -> Option<&str> {
+        let stem = std::path::Path::new(&self.path).file_stem()?;
+        stem.to_str()
+    }
 }
 
 impl Display for Song {
@@ -113,9 +118,18 @@ pub struct SongResult {
 
 impl From<&Song> for SongResult {
     fn from(song: &Song) -> Self {
+        let title = if song.title.is_empty() {
+            match song.file_stem() {
+                Some(s) => s.to_string(),
+                None => "(unknown)".to_string(),
+            }
+        } else {
+            song.title.clone()
+        };
+
         SongResult {
             id: song.id.to_string(),
-            title: song.title.clone(),
+            title,
             artist: song.artist.clone(),
             album: song.album.clone(),
             year: song.year,

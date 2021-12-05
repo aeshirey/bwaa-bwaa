@@ -73,6 +73,16 @@ async fn handle_listen(
     database: Arc<Mutex<MusicDB>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let db = database.lock().await;
+
+    if id == "whatsnew" {
+        return Ok(Box::new(
+            Response::builder()
+                .header("content-type", "audio/mpeg")
+                .body(WHATS_NEW_PUSSYCAT.to_vec())
+                .unwrap(),
+        ));
+    }
+
     let id = id.parse::<u64>().unwrap();
 
     let song = match db.records.get(&id) {
@@ -122,16 +132,27 @@ async fn handle_details(
     database: Arc<Mutex<MusicDB>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let db = database.lock().await;
+
+    if id == "whatsnew" {
+        let song = SongResult {
+            id: "whatsnew".to_string(),
+            title: "The best meal I've ever had in my life".to_string(),
+            artist: "John Mulaney".to_string(),
+            album: "Comedy Central Stand-Up".to_string(),
+            year: 2019,
+            comment: "https://www.youtube.com/watch?v=Mw7Gryt-rcc".to_string(),
+            duration: "21 instances of \"What's New, Pussycat?\"".to_string(),
+        };
+        return Ok(warp::reply::json(&song));
+    }
+
     let id = id.parse::<u64>().unwrap();
     match db.records.get(&id) {
         Some(s) => {
             let song: SongResult = s.into();
             Ok(warp::reply::json(&song))
-            //Response::builder()
-            //    .header("content-type", "text/json")
-            //    .body(song)
         }
-        None => Ok(warp::reply::json(&"?")), //todo!(),
+        None => Ok(warp::reply::json(&"?")),
     }
 }
 

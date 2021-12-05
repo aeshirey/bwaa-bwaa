@@ -85,6 +85,10 @@ impl MusicDB {
                     song.title.to_lowercase().contains(&term[..])
                         || song.artist.to_lowercase().contains(&term[..])
                         || song.album.to_lowercase().contains(&term[..])
+                        || match song.file_stem() {
+                            Some(s) => s.to_lowercase().contains(&term[..]),
+                            None => false,
+                        }
                 })
                 .take(lim)
                 .map(|s| s.into())

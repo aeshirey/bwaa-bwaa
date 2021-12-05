@@ -87,19 +87,15 @@
 
 		window.onload = function () {
 			const endpoint = "/search";
-
-			//var result = jQuery.get(endpoint + search_term, function (data) {
-			//	buildTable(data);
-			//});
 			jQuery.get(endpoint, buildTable);
-			//jQuery.get(endpoint + search_term, buildTable);
 		}
 
 	</script>
 </head>
 
 <body>
-	<input type="text" id="search" placeholder="Search..." onkeyup="search()">
+	<a href="javascript:listen('whatsnew')">🎺</a>
+	<input type="text" id="search" placeholder="Search..." onkeyup="search()" style="width: 300px">
 
 	<audio controls id='player' src="">
 		Your browser does not support the
