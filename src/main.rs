@@ -14,6 +14,8 @@ mod song;
 /// https://www.youtube.com/watch?v=Mw7Gryt-rcc
 const WHATS_NEW_PUSSYCAT: &[u8; 28797] = include_bytes!("../What's new pussycat.mp3");
 
+const FAVICON: &[u8; 15406] = include_bytes!("../favicon.ico");
+
 #[tokio::main]
 async fn main() {
     let to_scan = std::env::args()
@@ -44,6 +46,12 @@ async fn main() {
         .and(database.clone())
         .and_then(handle_details);
 
+    let favicon = warp::path!("favicon.ico").map(|| {
+        Response::builder()
+            .header("content-type", "image/x-icon")
+            .body(FAVICON.to_vec())
+    });
+
     let whats_new = warp::path!("whatsnew").and_then(handle_whats_new);
 
     let cors = warp::cors().allow_any_origin();
@@ -53,6 +61,7 @@ async fn main() {
         .or(search)
         .or(whats_new)
         .or(details)
+        .or(favicon)
         .with(cors);
 
     warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
