@@ -4,6 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+use crate::music_db::SortBy;
+
 #[derive(Debug, Hash, Default, Serialize, Deserialize)]
 pub struct Song {
     pub id: u64,
@@ -16,6 +18,14 @@ pub struct Song {
     pub comment: String,
     //pub genre: Genre,
     pub duration: Duration,
+    pub track: Option<u16>,
+
+    // Lowercase versions for searching
+    pub title_lower: String,
+    pub artist_lower: String,
+    pub album_lower: String,
+    // the file stem (eg, "11 Everlong.mp3" becomes "11 everlong")
+    pub stem_lower: String,
 }
 
 impl Song {
@@ -24,6 +34,17 @@ impl Song {
         let mut song = Self::from_mp3(filename).ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::InvalidData, "Can't read MP3 metadata")
         })?;
+
+        song.title_lower = song.title.to_lowercase();
+        song.artist_lower = song.artist.to_lowercase();
+        song.album_lower = song.album.to_lowercase();
+
+        song.stem_lower = std::path::Path::new(&song.path)
+            .file_stem()
+            .map(|o| o.to_str())
+            .flatten()
+            .map(|o| o.to_string())
+            .unwrap_or_else(String::new);
 
         let mut hasher = DefaultHasher::new();
         song.hash(&mut hasher);
@@ -46,6 +67,7 @@ impl Song {
             }
         } else {
             let info = metadata.optional_info.into_iter().next()?;
+            let track = Self::get_track(info.track_number.as_ref());
             Song {
                 path: filename.to_string(),
                 title: info.title.unwrap_or_else(String::new),
@@ -56,11 +78,23 @@ impl Song {
                 },
                 album: info.album_movie_show.unwrap_or_else(String::new),
                 duration: metadata.duration,
+                track,
                 ..Default::default()
             }
         };
 
         Some(song)
+    }
+
+    fn get_track(track_info: Option<&String>) -> Option<u16> {
+        let s = track_info?;
+        let slash = s.char_indices().find(|(_, c)| c == &'/');
+
+        match slash {
+            Some((i, _)) => s[..i].parse(),
+            None => s.parse(),
+        }
+        .ok()
     }
 
     pub fn duration_formatted(&self) -> String {
@@ -90,6 +124,46 @@ impl Song {
         let stem = std::path::Path::new(&self.path).file_stem()?;
         stem.to_str()
     }
+
+    pub fn cmp(&self, other: &Self, sort_by: SortBy) -> std::cmp::Ordering {
+        match sort_by {
+            SortBy::track => self
+                .track
+                .cmp(&other.track)
+                .then(self.title.cmp(&other.title))
+                .then(self.album_lower.cmp(&other.album_lower))
+                .then(self.artist_lower.cmp(&other.artist_lower))
+                .then(self.duration.cmp(&other.duration)),
+            SortBy::title => self
+                .title_lower
+                .cmp(&other.title_lower)
+                .then(self.track.cmp(&other.track))
+                .then(self.album_lower.cmp(&other.album_lower))
+                .then(self.artist_lower.cmp(&other.artist_lower))
+                .then(self.duration.cmp(&other.duration)),
+            SortBy::artist => self
+                .artist_lower
+                .cmp(&other.artist_lower)
+                .then(self.track.cmp(&other.track))
+                .then(self.title_lower.cmp(&other.title_lower))
+                .then(self.album_lower.cmp(&other.album_lower))
+                .then(self.duration.cmp(&other.duration)),
+            SortBy::album => self
+                .album_lower
+                .cmp(&other.album_lower)
+                .then(self.track.cmp(&other.track))
+                .then(self.title_lower.cmp(&other.title_lower))
+                .then(self.artist_lower.cmp(&other.artist_lower))
+                .then(self.duration.cmp(&other.duration)),
+            SortBy::duration => self
+                .duration
+                .cmp(&other.duration)
+                .then(self.track.cmp(&other.track))
+                .then(self.title_lower.cmp(&other.title_lower))
+                .then(self.album_lower.cmp(&other.album_lower))
+                .then(self.artist_lower.cmp(&other.artist_lower)),
+        }
+    }
 }
 
 impl Display for Song {
@@ -114,6 +188,7 @@ pub struct SongResult {
     pub year: u16,
     pub comment: String,
     pub duration: String,
+    pub track: Option<u16>,
 }
 
 impl From<&Song> for SongResult {
@@ -135,6 +210,7 @@ impl From<&Song> for SongResult {
             year: song.year,
             comment: song.comment.clone(),
             duration: song.duration_formatted(),
+            track: song.track,
         }
     }
 }

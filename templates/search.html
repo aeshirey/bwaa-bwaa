@@ -19,6 +19,12 @@
 			jQuery.get(endpoint + search_term, buildTable);
 		}
 
+		function results(qs) {
+			const search_term = encodeURIComponent(document.getElementById("search").value);
+			jQuery.get("/search?" + qs, buildTable);
+
+		}
+
 		function album(a) {
 			const endpoint = "/search?album=";
 			jQuery.get(endpoint + encodeURIComponent(a), buildTable);
@@ -55,6 +61,7 @@
 		function buildTable(data) {
 			var html = "<table id='songTable'>";
 			html += "<thead>";
+			html += "<th>Track</th>";
 			html += "<th>Song</th>";
 			html += "<th>Artist</th>";
 			html += "<th>Album</th>";
@@ -62,10 +69,11 @@
 			html += "<th>Duration</th>";
 			html += "</thead>";
 
-			for (var i = 0; i < data.length; i++) {
-				var song = data[i];
+			for (var i = 0; i < data.results.length; i++) {
+				var song = data.results[i];
 				const c = i % 2 ? "even" : "odd";
 				html += `<tr class='${c}'>`;
+				html += `<td>${song.track || ""}</td>`;
 				html += `<td><a href="javascript:listen('${song.id}')">${song.title}</a></td>`;
 				html += `<td><a href="javascript:artist('${song.artist}')">${song.artist}</a></td>`;
 				html += `<td><a href="javascript:album('${song.album}')">${song.album}</a></td>`;
@@ -80,6 +88,21 @@
 			}
 
 			html += "</table>";
+
+			if (data.has_more) {
+				// More results exist - display a 'next' link
+				html += "<br/>\n";
+
+				var terms = { 'after': data.results[data.results.length - 1].id };
+				for (let key in data.search_terms) {
+					const value = data.search_terms[key];
+					if (value !== null) {
+						terms[key] = value;
+					}
+				}
+				const qs = jQuery.param(terms);
+				html += `<a href="javascript:results('${qs}')">More results</a>`;
+			}
 
 			var songs = document.getElementById("songs");
 			songs.innerHTML = html;

@@ -15,9 +15,15 @@ mod song;
 const WHATS_NEW_PUSSYCAT: &[u8; 28797] = include_bytes!("../What's new pussycat.mp3");
 
 const FAVICON: &[u8; 15406] = include_bytes!("../favicon.ico");
+const DEFAULT_PORT: u16 = 8081;
 
 #[tokio::main]
 async fn main() {
+    let port = match std::env::var("PORT") {
+        Ok(s) => s.parse().expect("Invalid port number specified"),
+        Err(_) => DEFAULT_PORT,
+    };
+
     let to_scan = std::env::args()
         .filter(|arg| arg.starts_with("--scan="))
         .map(|arg| PathBuf::from(&arg[7..]))
@@ -64,7 +70,7 @@ async fn main() {
         .or(favicon)
         .with(cors);
 
-    warp::serve(routes).run(([0, 0, 0, 0], 8081)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
 }
 
 async fn handle_library(
@@ -131,7 +137,7 @@ async fn handle_search(
     database: Arc<Mutex<MusicDB>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let db = database.lock().await;
-    let results = db.query(&terms);
+    let results = db.query(terms);
 
     Ok(warp::reply::json(&results))
 }
@@ -151,6 +157,7 @@ async fn handle_details(
             year: 2019,
             comment: "https://www.youtube.com/watch?v=Mw7Gryt-rcc".to_string(),
             duration: "21 instances of \"What's New, Pussycat?\"".to_string(),
+            track: None,
         };
         return Ok(warp::reply::json(&song));
     }
