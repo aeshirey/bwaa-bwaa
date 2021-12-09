@@ -59,7 +59,15 @@
 		}
 
 		function buildTable(data) {
-			var html = "<table id='songTable'>";
+			var html = "";
+
+			if (data.other_albums !== null && data.other_albums.length) {
+				html += "Other albums: ";
+				html += data.other_albums.map(a => `<a href="javascript:album('${a}')">${a}</a>`).join(', ');
+				html += "<br/>\n";
+			}
+
+			html += "<table id='songTable'>";
 			html += "<thead>";
 			html += "<th>Track</th>";
 			html += "<th>Song</th>";

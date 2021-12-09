@@ -1,7 +1,7 @@
 use crate::song::{Song, SongResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
@@ -65,8 +65,7 @@ impl MusicDB {
         Ok(())
     }
 
-    pub fn query(&self, terms: SearchTerms) -> SearchResults {
-        let search_terms = terms.clone();
+    pub fn query(&self, search_terms: SearchTerms) -> SearchResults {
         let SearchTerms {
             artist,
             album,
@@ -74,7 +73,8 @@ impl MusicDB {
             limit,
             sort_by,
             after,
-        } = terms;
+        } = search_terms.clone();
+
         let limit = limit.unwrap_or(SearchTerms::DEFAULT_LIMIT) as usize;
         let artist = artist.unwrap_or_else(String::new).to_lowercase();
         let album = album.unwrap_or_else(String::new).to_lowercase();
@@ -111,14 +111,53 @@ impl MusicDB {
             }
         }
 
-        // After filtering, we can sort:
+        // After filtering, we can sort and take the first n:
         let mut results = results.collect::<Vec<_>>();
         results.sort_unstable_by(|&a, &b| a.cmp(b, sort_by));
+        let results = results
+            .into_iter()
+            .take(limit)
+            .map(|s| s.into())
+            .collect::<Vec<_>>();
+
+        let other_albums = if !artist.is_empty() {
+            // Find all albums by this artist
+            let artist_lower = artist.to_lowercase();
+            Some(
+                self.records
+                    .values()
+                    .filter(|&s| s.artist_lower == artist_lower)
+                    .map(|s| s.album.clone())
+                    .collect(),
+            )
+        } else if !album.is_empty() {
+            // Find all artists associated with this album name
+            let album_lower = album.to_lowercase();
+            let artists = self
+                .records
+                .values()
+                .filter(|&s| s.album_lower == album_lower)
+                .map(|s| s.artist.to_lowercase())
+                .collect::<HashSet<_>>();
+
+            // Then all albums for these artists except the one specified
+            Some(
+                self.records
+                    .values()
+                    .filter(|&s| *s.album_lower != album_lower)
+                    .filter(|&s| artists.contains(&s.artist_lower))
+                    .map(|s| s.album.clone())
+                    .collect(),
+            )
+        } else {
+            None
+        };
 
         SearchResults {
             has_more: results.len() > limit,
             search_terms,
-            results: results.into_iter().take(limit).map(|s| s.into()).collect(),
+            results,
+            other_albums,
         }
     }
 }
@@ -128,9 +167,7 @@ impl std::ops::Add for MusicDB {
 
     fn add(self, rhs: Self) -> Self::Output {
         let MusicDB { mut records } = self;
-
         records.extend(rhs.records);
-
         MusicDB { records }
     }
 }
@@ -150,8 +187,8 @@ pub struct SearchTerms {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub term: Option<String>,
+
     pub limit: Option<u16>,
-    //pub fuzzy: Option<u8>,
     pub sort_by: Option<SortBy>,
     pub after: Option<u64>,
 }
@@ -161,6 +198,8 @@ pub struct SearchResults {
     has_more: bool,
     search_terms: SearchTerms,
     results: Vec<SongResult>,
+
+    other_albums: Option<HashSet<String>>,
 }
 
 impl SearchTerms {
