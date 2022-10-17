@@ -15,6 +15,15 @@ pub(crate) struct MusicDB {
 }
 
 impl MusicDB {
+    pub fn new(filename: &str) -> Self {
+        match Self::from_file(filename) {
+            Ok(s) => s,
+            Err(_) => Self {
+                records: HashMap::new(),
+            },
+        }
+    }
+
     pub fn from_file(filename: &str) -> Result<Self, std::io::Error> {
         let file = File::open(filename)?;
         let buf = BufReader::new(file);
@@ -30,26 +39,39 @@ impl MusicDB {
         Ok(Self { records })
     }
 
-    pub fn scan(directory: &Path) -> Result<Self, std::io::Error> {
-        fn scan_dir(dir: &Path, records: &mut HashMap<u64, Song>) -> Result<(), std::io::Error> {
-            let dir_entries = std::fs::read_dir(dir)?;
-            for entry in dir_entries {
-                let path = entry?.path();
-                if path.is_dir() {
-                    scan_dir(&path, records)?;
-                } else if let Some(s) = path.to_str() {
-                    if let Ok(s) = Song::new(s) {
-                        records.insert(s.id, s);
-                    }
+    /// Scans `directory` for music.
+    ///
+    /// If `rescan_files` is set, individual MP3 files will be rescanned (parsing their ID3 tags,
+    /// for example); if false, then they will be parsed only if they aren't already in the database.
+    ///
+    /// A note on perf:
+    /// On a moderate (~4000 file) input, avoiding the rescan drops load time from about 7m to 1m.
+    ///
+    /// Keeping track of the known files as a HashSet instead of searching `self.records` further
+    /// drops the time from 1m to 30s.
+    fn scan_directory(
+        &mut self,
+        known_files: &mut HashSet<String>,
+        directory: &Path,
+        rescan_files: bool,
+    ) -> Result<(), std::io::Error> {
+        // Recursively search a directory
+        for entry in std::fs::read_dir(directory)?.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                self.scan_directory(known_files, &path, rescan_files)?;
+            } else if let Some(s) = path.to_str() {
+                if !rescan_files && known_files.contains(s) {
+                    //if !rescan_files && self.contains_file(s) {
+                    // no need to scan this file
+                } else if let Ok(s) = Song::new(s) {
+                    known_files.insert(s.path.clone());
+                    self.records.insert(s.id, s);
                 }
             }
-            Ok(())
         }
 
-        let mut records = HashMap::new();
-        scan_dir(directory, &mut records)?;
-
-        Ok(Self { records })
+        Ok(())
     }
 
     pub fn save_to(&self, filename: &str) -> Result<(), std::io::Error> {
@@ -76,9 +98,9 @@ impl MusicDB {
         } = search_terms.clone();
 
         let limit = limit.unwrap_or(SearchTerms::DEFAULT_LIMIT) as usize;
-        let artist = artist.unwrap_or_else(String::new).to_lowercase();
-        let album = album.unwrap_or_else(String::new).to_lowercase();
-        let term = term.unwrap_or_else(String::new).to_lowercase();
+        let artist = artist.unwrap_or_default().to_lowercase();
+        let album = album.unwrap_or_default().to_lowercase();
+        let term = term.unwrap_or_default().to_lowercase();
         let sort_by = sort_by.unwrap_or(SortBy::track);
 
         let mut results: Box<dyn Iterator<Item = _>> = Box::new(self.records.values());
@@ -206,43 +228,39 @@ impl SearchTerms {
     const DEFAULT_LIMIT: u16 = 100;
 }
 
-pub(crate) fn load_db(directories: Vec<PathBuf>) -> Option<MusicDB> {
+pub(crate) fn load_db(directories: Vec<(PathBuf, bool)>) -> Option<MusicDB> {
     if directories.is_empty() {
         // Nothing to scan - just load the library file if possible.
         let start = std::time::Instant::now();
         if let Ok(db) = MusicDB::from_file(LIBRARY_FILE) {
             println!(
-                "Loaded {} files from {} in {:.2?}",
+                "Loaded {} files from {LIBRARY_FILE} in {:.2?}",
                 db.records.len(),
-                LIBRARY_FILE,
                 start.elapsed()
             );
 
             Some(db)
         } else {
             eprintln!(
-                "No directories were specified for scanning, and no {} is present.",
-                LIBRARY_FILE
+                "No directories were specified for scanning, and {LIBRARY_FILE} wasn't present."
             );
-            eprintln!("Start this server with --scan=path/to/directory to scan for music.");
+            eprintln!("Start this server with --scan=path/to/directory or --rescan=path/to/directory to scan for music.");
             None
         }
     } else {
         println!("Scanning for MP3s...");
         let start = std::time::Instant::now();
-        let scanned = directories
-            .iter()
-            .filter_map(|dir| MusicDB::scan(dir).ok())
-            .fold(MusicDB::default(), |a, b| a + b);
+        let mut db = MusicDB::new(LIBRARY_FILE);
+
+        let mut known_files = db.records.values().map(|s| s.path.to_string()).collect();
+
+        for (directory, rescan_files) in directories {
+            db.scan_directory(&mut known_files, &directory, rescan_files)
+                .ok();
+        }
 
         let elapsed = start.elapsed();
-        println!("Scanned {} files in {:.2?}", scanned.records.len(), elapsed);
-
-        let db = if let Ok(existing) = MusicDB::from_file(LIBRARY_FILE) {
-            existing + scanned
-        } else {
-            scanned
-        };
+        println!("Scanned {} files in {:.2?}", db.records.len(), elapsed);
 
         db.save_to(LIBRARY_FILE).ok();
 

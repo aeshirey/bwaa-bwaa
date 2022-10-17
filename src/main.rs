@@ -25,9 +25,15 @@ async fn main() {
     };
 
     let to_scan = std::env::args()
-        .filter(|arg| arg.starts_with("--scan="))
-        .map(|arg| PathBuf::from(&arg[7..]))
-        .filter(|path| path.exists())
+        .filter_map(|arg| {
+            if let Some(d) = arg.strip_prefix("--scan=") {
+                Some((PathBuf::from(d), false))
+            } else {
+                arg.strip_prefix("--rescan")
+                    .map(|d| (PathBuf::from(d), true))
+            }
+        })
+        .filter(|(path, _)| path.exists())
         .collect();
     let database = music_db::load_db(to_scan).expect("Failed to load database");
     let database = Arc::new(Mutex::new(database));

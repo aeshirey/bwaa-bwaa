@@ -41,10 +41,9 @@ impl Song {
 
         song.stem_lower = std::path::Path::new(&song.path)
             .file_stem()
-            .map(|o| o.to_str())
-            .flatten()
+            .and_then(|o| o.to_str())
             .map(|o| o.to_string())
-            .unwrap_or_else(String::new);
+            .unwrap_or_default();
 
         let mut hasher = DefaultHasher::new();
         song.hash(&mut hasher);
@@ -70,13 +69,13 @@ impl Song {
             let track = Self::get_track(info.track_number.as_ref());
             Song {
                 path: filename.to_string(),
-                title: info.title.unwrap_or_else(String::new),
+                title: info.title.unwrap_or_default(),
                 artist: if info.performers.is_empty() {
                     "".to_string()
                 } else {
                     info.performers[0].to_string()
                 },
-                album: info.album_movie_show.unwrap_or_else(String::new),
+                album: info.album_movie_show.unwrap_or_default(),
                 duration: metadata.duration,
                 track,
                 ..Default::default()
